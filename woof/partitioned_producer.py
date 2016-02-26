@@ -82,22 +82,30 @@ class PartitionedProducer(Producer):
 
 class CyclicPartitionedProducer(PartitionedProducer):
 
-    def __init__(self, broker, random_start=True):
+    def __init__(self, broker, random_start=True, num_of_partitions=None):
         self.partition_cycles = {}
         self.random_start = random_start
+	self.num_of_partitions = None
+	if num_of_partitions:
+            self.num_of_partitions = num_of_partitions.split(",")
         super(CyclicPartitionedProducer, self).__init__(broker)
 
     def _next_partition(self, topic, key):
         if topic not in self.partition_cycles:
             if not self.client.has_metadata_for_topic(topic):
                 self.client.load_metadata_for_topics(topic)
-
-            self.partition_cycles[topic] = cycle(self.client.get_partition_ids_for_topic(topic))
+            if self.num_of_partitions:
+                temp_list = []
+		for val in self.num_of_partitions:
+                    start_index, end_index = map(int, val.split("-"))
+                    temp_list = temp_list + range(start_index, end_index + 1)
+                self.partition_cycles[topic] = cycle(temp_list)
+            else:
+                self.partition_cycles[topic] = cycle(self.client.get_partition_ids_for_topic(topic))
 
             # Randomize the initial partition that is returned
             if self.random_start:
                 num_partitions = len(self.client.get_partition_ids_for_topic(topic))
                 for _ in xrange(random.randint(0, num_partitions-1)):
                     next(self.partition_cycles[topic])
-
         return next(self.partition_cycles[topic])
